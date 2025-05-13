@@ -3,6 +3,8 @@ import { InMemoryCheckInsRepository } from "@/repositories/in-memory/in-memory-c
 import { CheckInUseCase } from "./check-in";
 import { InMemoryGymsRepository } from "@/repositories/in-memory/in-memory-gyms-repository";
 import { Decimal } from "@prisma/client/runtime/library";
+import { MaxNumerOfCheckInsError } from "./errors/max-number-of-check-ins-error";
+import { MaxDistanceError } from "./errors/max-distance-error";
 
 // testes unitários não devem acessar banco de dados e nem nada externo
 
@@ -11,19 +13,19 @@ let gymsRepository: InMemoryGymsRepository;
 let sut: CheckInUseCase;
 
 describe("Check-in Use Case", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     checkInsRepository = new InMemoryCheckInsRepository();
     gymsRepository = new InMemoryGymsRepository();
     // sut = system under test
     sut = new CheckInUseCase(checkInsRepository, gymsRepository);
 
-    gymsRepository.items.push({
+    await gymsRepository.create({
       id: "gym-01",
       title: "Teste Gym",
       description: "",
       phone: "",
-      latitude: new Decimal(0),
-      longitude: new Decimal(0),
+      latitude: 0,
+      longitude: 0,
     });
 
     vi.useFakeTimers();
@@ -61,7 +63,7 @@ describe("Check-in Use Case", () => {
         userLatitude: 0,
         userLongitude: 0,
       }),
-    ).rejects.toBeInstanceOf(Error);
+    ).rejects.toBeInstanceOf(MaxNumerOfCheckInsError);
   });
 
   it("should be able to check in twice but in different days", async () => {
@@ -84,5 +86,25 @@ describe("Check-in Use Case", () => {
     });
 
     expect(checkIn.id).toEqual(expect.any(String));
+  });
+
+  it("should not be able to check in on distante gym", async () => {
+    gymsRepository.items.push({
+      id: "gym-01",
+      title: "Teste Gym",
+      description: "",
+      phone: "",
+      latitude: new Decimal(-24.9609118),
+      longitude: new Decimal(-53.5034633),
+    });
+
+    await expect(() =>
+      sut.execute({
+        gymId: "gym-01",
+        userId: "user-01",
+        userLatitude: -24.9437022,
+        userLongitude: -53.436964,
+      }),
+    ).rejects.toBeInstanceOf(MaxDistanceError);
   });
 });
